@@ -2,13 +2,13 @@
 Step motor prototype. Some features still missing or need to set.
 */
 // Setups...
-#define CIRCLE_MM 100
-#define INTERVAL_LENGHT_MM 70
-#define INTERVALS 15
+#define CIRCLE_MM 40
+#define INTERVAL_LENGHT_MM 100
+#define INTERVALS 7
 #define WAIT_S 2
 #define MAX_MM 1000
 #define OFFSET 0
-#define CAMERA_T 100
+#define CAMERA_T 10
 
 // the setup function runs once when you press reset or power the board
 void setup() {
@@ -22,16 +22,18 @@ int interval = interval_steps(CIRCLE_MM, INTERVAL_LENGHT_MM);
 int t = 0;
 int move = 0;
 int moved_steps = 0;
+int ic = 0;
 // the loop function runs over and over again forever
 void loop() {
   if(direction == 1){
-    while(max > 0){
+    while(max > 0 && ic < INTERVALS){
       picture();
       testprint();
       
       move = move + turn(interval);
       max = max - INTERVAL_LENGHT_MM;
       t++;
+      ic++;
       delay(1000 * WAIT_S - (CAMERA_T * 3));
     }
     direction = 0;
