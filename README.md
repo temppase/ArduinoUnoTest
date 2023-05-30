@@ -2,10 +2,11 @@
 ## My first arduino project
 
 ---
-
 My first Arduino project. In the beginning, I started working with only blinking light and prints to create a possible logic. When I got the actual motor driver circuit, I test the actual motor control.
+
 ---
 The aim was to achieve interval movement and a return to zero points. The final application is intended to control the Arduino Duet and the x-axel motor.
+
 ---
 Mainly, I followed the instructions in this link.
 
