@@ -1,26 +1,18 @@
 /*
- Chat Server
-
- A simple server that distributes any incoming messages to all
- connected clients.  To use, telnet to your device's IP address and type.
- You can see the client's input in the serial monitor as well.
- Using an Arduino WIZnet Ethernet shield.
-
- Circuit:
- * Ethernet shield attached to pins 10, 11, 12, 13
-
- created 18 Dec 2009
- by David A. Mellis
- modified 9 Apr 2012
- by Tom Igoe
+Arduino telnet server stepper motor control
+created 2023 Teemu Sekki
 
  */
+#include <ezButton.h>
 #include <AccelStepper.h>
 #include <SPI.h>
 #include <Ethernet.h>
+
 #define dirPin 2
 #define stepPin 3
 #define motorinterfaceType 1
+
+ezButton limitSwitch(7);
 AccelStepper stepper = AccelStepper(motorinterfaceType, stepPin, dirPin);
 const double MAX_steps = 360000; // 36 cm, 100 steps = 1 mm
 // Enter a MAC address and IP address for your controller below.
@@ -32,11 +24,13 @@ IPAddress ip(192, 168, 1, 177);
 IPAddress myDns(192, 168, 1, 1);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 0, 0);
-String command;
+String cStr = "";
+String command = "";
 char c;
 int qtde;
 // telnet defaults to port 23
 EthernetServer server(23);
+double ready = 0;
 bool alreadyConnected = false; // whether or not the client was connected previously
 double I_mm = 0;
 double offset = 0;
@@ -49,7 +43,12 @@ double steps = 0;
 double i = 1;
 double start_time = 0;
 bool isZero = false;
+int limState;
 void setup() {
+  stepper.setCurrentPosition(0);
+  stepper.setMaxSpeed(1000);
+  stepper.setAcceleration(30);
+  limitSwitch.setDebounceTime(50);
   // You can use Ethernet.init(pin) to configure the CS pin
   //Ethernet.init(10);  // Most Arduino shields
   //Ethernet.init(5);   // MKR ETH Shield
@@ -61,37 +60,23 @@ void setup() {
   // initialize the Ethernet device
   Ethernet.begin(mac, ip, myDns, gateway, subnet);
 
-  // Open serial communications and wait for port to open:
-  Serial.begin(9600);
-   while (!Serial) {
-    ; // wait for serial port to connect. Needed for native USB port only
-  }
-  if(Serial){
-    // Check for Ethernet hardware present
-    if (Ethernet.hardwareStatus() == EthernetNoHardware) {
-      Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
-      while (true) {
-        delay(1); // do nothing, no point running without Ethernet hardware
-      }
+  // Open serial communications for debug if neccessary:
+   Serial.begin(9600);
+  if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+    //Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+    while (true) {
+      delay(1); // do nothing, no point running without Ethernet hardware
     }
-    if (Ethernet.linkStatus() == LinkOFF) {
-      Serial.println("Ethernet cable is not connected.");
-    }
-
   }
 
   // start listening for clients
   server.begin();
-  if(Serial){
-    Serial.print("Server address:");
-    Serial.println(Ethernet.localIP());
-  }
-
 }
-
+// ****Loop start****
 void loop() {
   if(!isZero){
     toZero();
+    Serial.println("In reference point");
     isZero = true;
   }
   // wait for a new client:
@@ -101,48 +86,36 @@ void loop() {
   if (client) {
     if (!alreadyConnected) {
       // clear out the input buffer:
-      // Send info to client!!!
       client.flush();
-      if(Serial){Serial.println("A new client");}
-      
-      client.println(printData());
       alreadyConnected = true;
     }
     //Serial.println();
     if(client.available() > 0) {
-      // read the bytes incoming from the client:
-      if(command != client.readStringUntil('*')){
-        // if message is chage update it;
+      // read the string incoming from the client:
         command = client.readStringUntil('*');
+        client.println(printData());
         CR = true; // command readed true
-      }
-
     }
   }
-  if(CR){
     // if command readded true set command
-    setCommand();
-    CR = false;
-  }
+  if(CR == true){setCommand(command);CR = false;}
+    // play condition
   if(play){
-    // play true
     // ***Stepper commands***
     steps = 100 * I_mm * direction * i;
     // test timer logic..
     if((millis()/1000) - start_time >= I_s){
       if(steps < MAX_steps && i <= I_count){
-        if(Serial){Serial.println(steps);}
-        
+        // if(Serial){Serial.println(steps);}
         i++;
         start_time = millis()/1000;
-        // moveToPosition(steps)
-        // runToPosition
-        // Still need to figure out how to do interval timer...
-        // There is many possible option to use..
+        // stepper.moveToPosition(steps)
+        // stepper.runToPosition()
       }
       else{
-        // moveToPosition(MAX_steps)
-        // runToPosition
+        // If last step is less than interval lenght...
+        // stepper.moveToPosition(MAX_steps)
+        // stepper.runToPosition()
         // delay(1000)
         // moveToPosition()
         // runToPosition
@@ -150,67 +123,66 @@ void loop() {
       }
     }
   }
+  client.stop();
 }
 // ******LOOP END*******
 String printData(){
   // return info to user
-  double ready = 0;
+  // add reference point info
   if(steps > 0){
     ready = steps / MAX_steps * 100;
   }
-  String state = "Connected to: ";
-  state += String(Ethernet.localIP());
+  String state = "Connected to: 192.168.1.177";
   state += "\n__Values__\n";
   state += "Interval length mm:";
   state += String(I_mm);
-  state += "\nInterval offset: ";
+  state += "\nInterval offset:";
   state += String(offset);
-  state += "\nInterval time: ";
+  state += "\nInterval time:";
   state += String(I_s);
-  state += " s\nIntervals: ";
+  state += " s\nIntervals:";
   state += String(I_count);
-  state += "\nDirection: ";
+  state += "\nDirection:";
   state += String(direction);
-  state += "\nPlay: ";
+  state += "\nPlay:";
   state += String(play);
-  state += "\nReady: ";
+  state += "\nReady:";
   state += String(ready);
   state += "%";
   return state;
 }
-void setCommand(){
-  if(command == ""){
+void setCommand(String c){
 
-  }else if(command == "min"){
+  if(c == "info"){
+    // returns only info
+  }else if(c == "min"){
       // ***Stepper commands***
-      // moveToPosition(0);
-      // runToPosition();
-  }else if(command == "max"){
+      // stepper.moveToPosition(0);
+      // stepper.runToPosition();
+  }else if(c == "max"){
       // ***Stepper commands***
-      // moveToPosition(MAX_steps);
-      // runToPosition();
-  }else if(command == "play"){
+      // stepper.moveToPosition(MAX_steps);
+      // stepper.runToPosition();
+  }else if(c == "play"){
       play = true;
       start_time = millis()/1000;
-  }else if(command == "pause"){
+  }else if(c == "pause"){
       // pause condition
       play = false;
-  }else if(command == "reset"){
+  }else if(c == "reset"){
       play = false;
       I_mm = 0;
       I_s = 0;
       I_count = 0;
       direction = 0;
-      // reset condition
-      // ***Stepper commands***
-      // moveToPosition(0);
-      // runToPosition();
+      ready = 0;
+      toZero();
   }else{
       // parse values
-      String* p = split(command, '|', qtde);
-      I_mm = p[0].toDouble();
-      I_s = p[1].toDouble();
-      I_count = p[2].toDouble();
+      String* p = split(c, '|', qtde);
+      I_count = p[0].toDouble();
+      I_mm = p[1].toDouble();
+      I_s = p[2].toDouble();
       direction = p[3].toDouble();
       offset = p[4].toDouble();
       delete[] p;
@@ -251,9 +223,22 @@ String* split(String& v, char delimiter, int& length) {
   return nullptr;
 }
 void toZero(){
-  // ***Stepper commands***
-  // moveToPosition(-300);
-  // runToPosition();
-  // limit switch break..
-  // currentPosition(0);
+  limitSwitch.loop();
+  limState = limitSwitch.getState();
+  // Check if it's already in 0 point
+  if(limState == LOW){
+    Serial.println("Zero point");
+  }
+  else{
+    // stepper.moveTo(-300);
+    // stepper.runTo();
+    Serial.println("Go to zero");
+    while(digitalRead(7) > 0){
+      Serial.print("|");
+    }
+    Serial.println();
+    if(limitSwitch.isPressed()){
+      Serial.println("Hit zero");
+    }
+  }
 }
