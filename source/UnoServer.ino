@@ -1,6 +1,10 @@
 /*
+<<<<<<< HEAD
 Arduino telnet server stepper motor control
 created 2023 Teemu Sekki
+=======
+ Stepper motor server arduino
+>>>>>>> 9a31a6eef5759fbdc9e1d6daf4508e95cb35405a
 
  */
 #include <ezButton.h>
