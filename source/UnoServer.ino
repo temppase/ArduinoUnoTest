@@ -11,7 +11,7 @@ created 2023 Teemu Sekki
 #define dirPin 2
 #define stepPin 3
 #define motorinterfaceType 1
-#define limPin
+#define limPin 7
 
 ezButton limitSwitch(limPin);
 AccelStepper stepper = AccelStepper(motorinterfaceType, stepPin, dirPin);
