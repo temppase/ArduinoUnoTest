@@ -11,8 +11,9 @@ created 2023 Teemu Sekki
 #define dirPin 2
 #define stepPin 3
 #define motorinterfaceType 1
+#define limPin
 
-ezButton limitSwitch(7);
+ezButton limitSwitch(limPin);
 AccelStepper stepper = AccelStepper(motorinterfaceType, stepPin, dirPin);
 const double MAX_steps = 360000; // 36 cm, 100 steps = 1 mm
 // Enter a MAC address and IP address for your controller below.
@@ -243,7 +244,7 @@ void toZero(){
     Serial.println("Go to zero");
     // Set direction counterclockwise
     digitalWrite(dirPin, LOW);
-    while(digitalRead(7) > 0){
+    while(digitalRead(limPin) > 0){
       digitalWrite(dirPin, HIGH);
       delay(1);
       digitalWrite(dirPin, LOW);
