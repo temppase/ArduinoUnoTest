@@ -1,10 +1,6 @@
 /*
-<<<<<<< HEAD
 Arduino telnet server stepper motor control
 created 2023 Teemu Sekki
-=======
- Stepper motor server arduino
->>>>>>> 9a31a6eef5759fbdc9e1d6daf4508e95cb35405a
 
  */
 #include <ezButton.h>
@@ -36,23 +32,26 @@ int qtde;
 EthernetServer server(23);
 double ready = 0;
 bool alreadyConnected = false; // whether or not the client was connected previously
+// parameters start ****
 double I_mm = 0;
 double offset = 0;
 double I_s = 0;
 double direction = 0;
 double I_count = 0;
-bool play = false;
+// parameters end *******
+bool play = false; // play state
 bool CR = false; // command readed
-double steps = 0;
+double steps = 0; // measure taken steps
 double i = 1;
 double start_time = 0;
-bool isZero = false;
-int limState;
+bool isZero = false; // check the reference point
+int limState; 
 void setup() {
   stepper.setCurrentPosition(0);
   stepper.setMaxSpeed(1000);
   stepper.setAcceleration(30);
   limitSwitch.setDebounceTime(50);
+  // posible additional features...
   // You can use Ethernet.init(pin) to configure the CS pin
   //Ethernet.init(10);  // Most Arduino shields
   //Ethernet.init(5);   // MKR ETH Shield
@@ -110,21 +109,21 @@ void loop() {
     // test timer logic..
     if((millis()/1000) - start_time >= I_s){
       if(steps < MAX_steps && i <= I_count){
-        // if(Serial){Serial.println(steps);}
         i++;
         start_time = millis()/1000;
-        // stepper.moveToPosition(steps)
-        // stepper.runToPosition()
+        stepper.moveToPosition(steps)
+        stepper.runToPosition()
       }
       else{
+        // check if needed ************
         // If last step is less than interval lenght...
         // stepper.moveToPosition(MAX_steps)
         // stepper.runToPosition()
-        // delay(1000)
-        // moveToPosition()
-        // runToPosition
+        // delay(1000 * I_s)
         play = false;
+        iZero = false;
       }
+      
     }
   }
   client.stop();
@@ -150,6 +149,8 @@ String printData(){
   state += String(direction);
   state += "\nPlay:";
   state += String(play);
+  state += "\nReference:";
+  state += String(isZero);
   state += "\nReady:";
   state += String(ready);
   state += "%";
@@ -160,36 +161,40 @@ void setCommand(String c){
   if(c == "info"){
     // returns only info
   }else if(c == "min"){
-      // ***Stepper commands***
-      // stepper.moveToPosition(0);
-      // stepper.runToPosition();
+    // ***Stepper commands***
+    stepper.moveToPosition(0);
+    stepper.runToPosition();
   }else if(c == "max"){
-      // ***Stepper commands***
-      // stepper.moveToPosition(MAX_steps);
-      // stepper.runToPosition();
+    // ***Stepper commands***
+    stepper.moveToPosition(MAX_steps);
+    stepper.runToPosition();
+  }else if(c == "move"){
+    stepper.moveToPosition(offset);
+    stepper.runToPosition();
   }else if(c == "play"){
-      play = true;
-      start_time = millis()/1000;
+    play = true;
+    start_time = millis()/1000;
   }else if(c == "pause"){
-      // pause condition
-      play = false;
+    // pause condition
+    play = false;
   }else if(c == "reset"){
-      play = false;
-      I_mm = 0;
-      I_s = 0;
-      I_count = 0;
-      direction = 0;
-      ready = 0;
-      toZero();
+    play = false;
+    I_mm = 0;
+    ofsett = = 0;
+    I_s = 0;
+    I_count = 0;
+    direction = 0;
+    ready = 0;
+    toZero();
   }else{
-      // parse values
-      String* p = split(c, '|', qtde);
-      I_count = p[0].toDouble();
-      I_mm = p[1].toDouble();
-      I_s = p[2].toDouble();
-      direction = p[3].toDouble();
-      offset = p[4].toDouble();
-      delete[] p;
+    // parse values
+    String* p = split(c, '|', qtde);
+    I_count = p[0].toDouble();
+    I_mm = p[1].toDouble();
+    I_s = p[2].toDouble();
+    direction = p[3].toDouble();
+    offset = p[4].toDouble();
+    delete[] p;
   }
 }
 String* split(String& v, char delimiter, int& length) {
@@ -231,18 +236,20 @@ void toZero(){
   limState = limitSwitch.getState();
   // Check if it's already in 0 point
   if(limState == LOW){
+    stepper.setCurrentPosition(0);
     Serial.println("Zero point");
   }
   else{
-    // stepper.moveTo(-300);
-    // stepper.runTo();
     Serial.println("Go to zero");
+    // Set direction counterclockwise
+    digitalWrite(dirPin, LOW);
     while(digitalRead(7) > 0){
-      Serial.print("|");
+      digitalWrite(dirPin, HIGH);
+      delay(1);
+      digitalWrite(dirPin, LOW);
+      delay(1);
     }
     Serial.println();
-    if(limitSwitch.isPressed()){
-      Serial.println("Hit zero");
-    }
+    stepper.setCurrentPosition(0);
   }
 }
