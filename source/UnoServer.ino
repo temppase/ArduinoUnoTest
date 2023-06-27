@@ -7,14 +7,15 @@ created 2023 Teemu Sekki
 #include <AccelStepper.h>
 #include <SPI.h>
 #include <Ethernet.h>
-
+// Globals *****************
 #define dirPin 2
 #define stepPin 3
 #define motorinterfaceType 1
+#define limPin 7
 
-ezButton limitSwitch(7);
-AccelStepper stepper = AccelStepper(motorinterfaceType, stepPin, dirPin);
-const double MAX_steps = 360000; // 36 cm, 100 steps = 1 mm
+ezButton limitSwitch(limPin);
+AccelStepper stepper = AccelStepper(motorinterfaceType, dirPin, stepPin);
+const double MAX_s = 35000; // 36 cm, 100 steps = 1 mm
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network.
 // gateway and subnet are optional:
@@ -24,13 +25,12 @@ IPAddress ip(192, 168, 1, 177);
 IPAddress myDns(192, 168, 1, 1);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 0, 0);
-String cStr = "";
 String command = "";
-char c;
 int qtde;
 // telnet defaults to port 23
 EthernetServer server(23);
 double ready = 0;
+int stepsTaken = 0;
 bool alreadyConnected = false; // whether or not the client was connected previously
 // parameters start ****
 double I_mm = 0;
@@ -39,6 +39,8 @@ double I_s = 0;
 double direction = 0;
 double I_count = 0;
 // parameters end *******
+// helppers *************
+bool mocon = false; // chenge true when motor connected
 bool play = false; // play state
 bool CR = false; // command readed
 double steps = 0; // measure taken steps
@@ -46,10 +48,12 @@ double i = 1;
 double start_time = 0;
 bool isZero = false; // check the reference point
 int limState; 
+// Globals end *********************************
 void setup() {
+
   stepper.setCurrentPosition(0);
   stepper.setMaxSpeed(1000);
-  stepper.setAcceleration(30);
+  stepper.setAcceleration(300);
   limitSwitch.setDebounceTime(50);
   // posible additional features...
   // You can use Ethernet.init(pin) to configure the CS pin
@@ -78,28 +82,13 @@ void setup() {
 // ****Loop start****
 void loop() {
   if(!isZero){
-    toZero();
-    Serial.println("In reference point");
+    if(mocon){
+      toZero();
+    }
     isZero = true;
   }
   // wait for a new client:
-  EthernetClient client = server.available();
-
-  // when the client sends the first byte, say hello:
-  if (client) {
-    if (!alreadyConnected) {
-      // clear out the input buffer:
-      client.flush();
-      alreadyConnected = true;
-    }
-    //Serial.println();
-    if(client.available() > 0) {
-      // read the string incoming from the client:
-        command = client.readStringUntil('*');
-        client.println(printData());
-        CR = true; // command readed true
-    }
-  }
+  checkClient(printData());
     // if command readded true set command
   if(CR == true){setCommand(command);CR = false;}
     // play condition
@@ -107,43 +96,66 @@ void loop() {
     // ***Stepper commands***
     steps = 100 * I_mm * direction * i;
     // test timer logic..
-    if((millis()/1000) - start_time >= I_s){
-      if(steps < MAX_steps && i <= I_count){
-        i++;
-        start_time = millis()/1000;
-        stepper.moveToPosition(steps)
-        stepper.runToPosition()
+    if(direction == 1){
+      if((millis()/1000) - start_time >= I_s){
+        if(steps < MAX_s && i <= I_count){
+          i++;
+          start_time = millis()/1000;
+          if(mocon){
+            stepper.moveTo(offset + steps);
+            stepper.runToPosition();
+          }
+          Serial.print("Interval: ");
+          Serial.print(i - 1);
+          Serial.print(", Run to: ");
+          Serial.print(offset + steps);
+          Serial.print(", time: ");
+          Serial.println(start_time);
+        }
+        else{
+          play = false;
+        }
+        
       }
-      else{
-        // check if needed ************
-        // If last step is less than interval lenght...
-        // stepper.moveToPosition(MAX_steps)
-        // stepper.runToPosition()
-        // delay(1000 * I_s)
-        play = false;
-        iZero = false;
+    }
+    else{
+      if(direction == -1){
+        if((millis()/1000) - start_time >= I_s){
+          if(steps > 0 && i <= I_count){
+            i++;
+            start_time = millis()/1000;
+            if(mocon){
+              stepper.moveTo(offset - steps);
+              stepper.runToPosition();
+            }
+          Serial.print("Interval: ");
+          Serial.print(i);
+          Serial.print("Run to: ");
+          Serial.print(offset - steps);
+          Serial.print(", time: ");
+          Serial.println(start_time);
+          }
+          else{
+            play = false;
+          }
+        }
       }
-      
     }
   }
-  client.stop();
 }
 // ******LOOP END*******
 String printData(){
   // return info to user
   // add reference point info
-  if(steps > 0){
-    ready = steps / MAX_steps * 100;
-  }
-  String state = "Connected to: 192.168.1.177";
+  String state = "Connected to: 192.168.1.177:23";
   state += "\n__Values__\n";
-  state += "Interval length mm:";
+  state += "Interval length (mm):";
   state += String(I_mm);
-  state += "\nInterval offset:";
+  state += "\nInterval offset (mm):";
   state += String(offset);
-  state += "\nInterval time:";
+  state += "\nInterval time (s):";
   state += String(I_s);
-  state += " s\nIntervals:";
+  state += "\nIntervals:";
   state += String(I_count);
   state += "\nDirection:";
   state += String(direction);
@@ -151,43 +163,42 @@ String printData(){
   state += String(play);
   state += "\nReference:";
   state += String(isZero);
-  state += "\nReady:";
-  state += String(ready);
-  state += "%";
   return state;
 }
 void setCommand(String c){
 
   if(c == "info"){
     // returns only info
-  }else if(c == "min"){
-    // ***Stepper commands***
-    stepper.moveToPosition(0);
-    stepper.runToPosition();
-  }else if(c == "max"){
-    // ***Stepper commands***
-    stepper.moveToPosition(MAX_steps);
-    stepper.runToPosition();
-  }else if(c == "move"){
-    stepper.moveToPosition(offset);
-    stepper.runToPosition();
+    Serial.println("Info");
+  }else if(c.indexOf("v") > 0){
+    String* p = split(c, '|', qtde);
+    double move = p[1].toDouble();
+    delete[] p;
+    if(mocon){
+      stepper.moveTo(move * 100);
+      stepper.runToPosition();
+      delay(500);
+    }
+    Serial.print("Move to: ");
+    Serial.println(move);
   }else if(c == "play"){
+    Serial.print("Play position: ");
+    Serial.print(offset);
+    Serial.print(" direction: ");
+    Serial.print(direction);
     play = true;
     start_time = millis()/1000;
-  }else if(c == "pause"){
-    // pause condition
-    play = false;
   }else if(c == "reset"){
+    Serial.println("Reset");
     play = false;
-    I_mm = 0;
-    ofsett = = 0;
-    I_s = 0;
-    I_count = 0;
-    direction = 0;
-    ready = 0;
-    toZero();
+    I_mm = 0; offset = 0; I_s = 0; I_count = 0; direction = 0; ready = 0; steps = 0;
+    Serial.println(I_mm + offset + I_s + I_count + direction + ready + steps);
+    if(mocon){
+      backZero();
+    }
   }else{
     // parse values
+    Serial.println(c);
     String* p = split(c, '|', qtde);
     I_count = p[0].toDouble();
     I_mm = p[1].toDouble();
@@ -195,6 +206,20 @@ void setCommand(String c){
     direction = p[3].toDouble();
     offset = p[4].toDouble();
     delete[] p;
+    Serial.print("Intervals: ");
+    Serial.println(I_count);
+    Serial.print("Interval mm: ");
+    Serial.println(I_mm);
+    Serial.print("Interval s: ");
+    Serial.println(I_s);
+    Serial.print("Dir: ");
+    Serial.println(direction);
+    Serial.print("Offset: ");
+    Serial.println(offset);
+    if(mocon){
+      stepper.moveTo(offset * 100);
+      stepper.runToPosition();
+    }
   }
 }
 String* split(String& v, char delimiter, int& length) {
@@ -242,14 +267,56 @@ void toZero(){
   else{
     Serial.println("Go to zero");
     // Set direction counterclockwise
+    pinMode(stepPin, OUTPUT);
+    pinMode(dirPin, OUTPUT);
     digitalWrite(dirPin, LOW);
-    while(digitalRead(7) > 0){
+    while(digitalRead(limPin) > 0){
+      checkClient("Running to reference point");
       digitalWrite(dirPin, HIGH);
-      delay(1);
+      delay(1);      
       digitalWrite(dirPin, LOW);
       delay(1);
     }
     Serial.println();
+    Serial.println("In zere");
     stepper.setCurrentPosition(0);
   }
 }
+void backZero(){
+  stepper.moveTo(0);
+  stepper.runToPosition();
+}
+void checkClient(String m){
+  EthernetClient client = server.available();
+
+  // when the client sends the first byte, say hello:
+  if (client) {
+    if (!alreadyConnected) {
+      // clear out the input buffer:
+      client.flush();
+      alreadyConnected = true;
+    }
+    //Serial.println();
+    if(client.available() > 0) {
+      // read the string incoming from the client:
+        if(m != "Running to reference point"){
+          command = client.readStringUntil('*');
+        }
+        client.println(m);
+        CR = true; // command readed true
+    }
+  }
+  client.stop();
+}
+// Optional spin method for motor (just incase)
+// spinMotor(int _steps, int _direction){
+//   digitalWrite(dirPin, _direction);
+//   while(s > 0 || stepsTaken < MAX_s){
+//     digitalWrite(dirPin, HIGH);
+//     delay(1);      
+//     digitalWrite(dirPin, LOW);
+//     delay(1);
+//     s--;
+//     stepsTaken++;
+//   }
+// }
