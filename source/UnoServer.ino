@@ -14,8 +14,13 @@ created 2023 Teemu Sekki
 #define limPin 7
 
 ezButton limitSwitch(limPin);
+<<<<<<< HEAD
 AccelStepper stepper = AccelStepper(motorinterfaceType, dirPin, stepPin);
 const double MAX_s = 35000; // 36 cm, 100 steps = 1 mm
+=======
+AccelStepper stepper = AccelStepper(motorinterfaceType, stepPin, dirPin);
+const double MAX_steps = 360000; // 36 cm, 100 steps = 1 mm
+>>>>>>> 5fd11337237be020aebc150ca3951e329d1dabdf
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network.
 // gateway and subnet are optional:
@@ -271,7 +276,10 @@ void toZero(){
     pinMode(dirPin, OUTPUT);
     digitalWrite(dirPin, LOW);
     while(digitalRead(limPin) > 0){
+<<<<<<< HEAD
       checkClient("Running to reference point");
+=======
+>>>>>>> 5fd11337237be020aebc150ca3951e329d1dabdf
       digitalWrite(dirPin, HIGH);
       delay(1);      
       digitalWrite(dirPin, LOW);
