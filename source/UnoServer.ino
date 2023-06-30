@@ -14,13 +14,8 @@ created 2023 Teemu Sekki
 #define limPin 7
 
 ezButton limitSwitch(limPin);
-<<<<<<< HEAD
 AccelStepper stepper = AccelStepper(motorinterfaceType, dirPin, stepPin);
 const double MAX_s = 35000; // 36 cm, 100 steps = 1 mm
-=======
-AccelStepper stepper = AccelStepper(motorinterfaceType, stepPin, dirPin);
-const double MAX_steps = 360000; // 36 cm, 100 steps = 1 mm
->>>>>>> 5fd11337237be020aebc150ca3951e329d1dabdf
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network.
 // gateway and subnet are optional:
@@ -60,14 +55,6 @@ void setup() {
   stepper.setMaxSpeed(1000);
   stepper.setAcceleration(300);
   limitSwitch.setDebounceTime(50);
-  // posible additional features...
-  // You can use Ethernet.init(pin) to configure the CS pin
-  //Ethernet.init(10);  // Most Arduino shields
-  //Ethernet.init(5);   // MKR ETH Shield
-  //Ethernet.init(0);   // Teensy 2.0
-  //Ethernet.init(20);  // Teensy++ 2.0
-  //Ethernet.init(15);  // ESP8266 with Adafruit FeatherWing Ethernet
-  //Ethernet.init(33);  // ESP32 with Adafruit FeatherWing Ethernet
 
   // initialize the Ethernet device
   Ethernet.begin(mac, ip, myDns, gateway, subnet);
@@ -86,22 +73,16 @@ void setup() {
 }
 // ****Loop start****
 void loop() {
-  if(!isZero){
-    if(mocon){
-      toZero();
-    }
-    isZero = true;
-  }
-  // wait for a new client:
   checkClient(printData());
-    // if command readded true set command
+      // if command readded true set command
   if(CR == true){setCommand(command);CR = false;}
-    // play condition
+      // play condition
   if(play){
     // ***Stepper commands***
-    steps = 100 * I_mm * direction * i;
+    steps = I_mm * direction * i;
     // test timer logic..
     if(direction == 1){
+      Serial.println("Play start to end.");
       if((millis()/1000) - start_time >= I_s){
         if(steps < MAX_s && i <= I_count){
           i++;
@@ -123,26 +104,25 @@ void loop() {
         
       }
     }
-    else{
-      if(direction == -1){
-        if((millis()/1000) - start_time >= I_s){
-          if(steps > 0 && i <= I_count){
-            i++;
-            start_time = millis()/1000;
-            if(mocon){
-              stepper.moveTo(offset - steps);
-              stepper.runToPosition();
-            }
+    if(direction == -1){
+      Serial.println("Play end to start.");
+      if((millis()/1000) - start_time >= I_s){
+        if(steps > 0 && i <= I_count){
+          i++;
+          start_time = millis()/1000;
+          if(mocon){
+            stepper.moveTo(offset - steps);
+            stepper.runToPosition();
+          }
           Serial.print("Interval: ");
           Serial.print(i);
           Serial.print("Run to: ");
           Serial.print(offset - steps);
           Serial.print(", time: ");
           Serial.println(start_time);
-          }
-          else{
-            play = false;
-          }
+        }
+        else{
+          play = false;
         }
       }
     }
@@ -187,19 +167,22 @@ void setCommand(String c){
     Serial.print("Move to: ");
     Serial.println(move);
   }else if(c == "play"){
-    Serial.print("Play position: ");
-    Serial.print(offset);
-    Serial.print(" direction: ");
-    Serial.print(direction);
+    if(mocon){
+      isZero = false;
+      toZero();
+    }
     play = true;
     start_time = millis()/1000;
+  }else if(c == "setref"){
+    toZero();
   }else if(c == "reset"){
     Serial.println("Reset");
     play = false;
     I_mm = 0; offset = 0; I_s = 0; I_count = 0; direction = 0; ready = 0; steps = 0;
     Serial.println(I_mm + offset + I_s + I_count + direction + ready + steps);
     if(mocon){
-      backZero();
+      isZero = false;
+      toZero();
     }
   }else{
     // parse values
@@ -213,7 +196,7 @@ void setCommand(String c){
     delete[] p;
     Serial.print("Intervals: ");
     Serial.println(I_count);
-    Serial.print("Interval mm: ");
+    Serial.print("Interval steps: ");
     Serial.println(I_mm);
     Serial.print("Interval s: ");
     Serial.println(I_s);
@@ -268,46 +251,33 @@ void toZero(){
   if(limState == LOW){
     stepper.setCurrentPosition(0);
     Serial.println("Zero point");
+    isZero = true;
   }
   else{
-    Serial.println("Go to zero");
-    // Set direction counterclockwise
-    pinMode(stepPin, OUTPUT);
-    pinMode(dirPin, OUTPUT);
-    digitalWrite(dirPin, LOW);
-    while(digitalRead(limPin) > 0){
-<<<<<<< HEAD
-      checkClient("Running to reference point");
-=======
->>>>>>> 5fd11337237be020aebc150ca3951e329d1dabdf
-      digitalWrite(dirPin, HIGH);
-      delay(1);      
-      digitalWrite(dirPin, LOW);
-      delay(1);
+    Serial.println("Go to zero!");
+    while(stepper.currentPosition() > -MAX_s && digitalRead(limPin) > 0) 
+    {
+      stepper.setSpeed(-1000);
+      stepper.runSpeed();
+      checkClient("Run to reference point");
     }
+    isZero = true;
     Serial.println();
     Serial.println("In zere");
     stepper.setCurrentPosition(0);
   }
 }
-void backZero(){
-  stepper.moveTo(0);
-  stepper.runToPosition();
-}
 void checkClient(String m){
   EthernetClient client = server.available();
-
-  // when the client sends the first byte, say hello:
   if (client) {
     if (!alreadyConnected) {
       // clear out the input buffer:
       client.flush();
       alreadyConnected = true;
     }
-    //Serial.println();
     if(client.available() > 0) {
       // read the string incoming from the client:
-        if(m != "Running to reference point"){
+        if(m != "Run to reference point"){
           command = client.readStringUntil('*');
         }
         client.println(m);
@@ -316,15 +286,4 @@ void checkClient(String m){
   }
   client.stop();
 }
-// Optional spin method for motor (just incase)
-// spinMotor(int _steps, int _direction){
-//   digitalWrite(dirPin, _direction);
-//   while(s > 0 || stepsTaken < MAX_s){
-//     digitalWrite(dirPin, HIGH);
-//     delay(1);      
-//     digitalWrite(dirPin, LOW);
-//     delay(1);
-//     s--;
-//     stepsTaken++;
-//   }
-// }
+
