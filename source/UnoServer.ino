@@ -15,7 +15,7 @@ created 2023 Teemu Sekki
 
 ezButton limitSwitch(limPin);
 AccelStepper stepper = AccelStepper(motorinterfaceType, dirPin, stepPin);
-const double MAX_s = 35000; // 36 cm, 100 steps = 1 mm
+const double MAX_s = 36000; // 36 cm, 100 steps = 1 mm
 // Enter a MAC address and IP address for your controller below.
 // The IP address will be dependent on your local network.
 // gateway and subnet are optional:
@@ -40,7 +40,7 @@ double direction = 0;
 double I_count = 0;
 // parameters end *******
 // helppers *************
-bool mocon = false; // chenge true when motor connected
+bool mocon = true; // chenge true when motor connected
 bool play = false; // play state
 bool CR = false; // command readed
 double steps = 0; // measure taken steps
@@ -79,10 +79,10 @@ void loop() {
       // play condition
   if(play){
     // ***Stepper commands***
-    steps = I_mm * direction * i;
+    steps = I_mm * i;
+
     // test timer logic..
     if(direction == 1){
-      Serial.println("Play start to end.");
       if((millis()/1000) - start_time >= I_s){
         if(steps < MAX_s && i <= I_count){
           i++;
@@ -91,12 +91,12 @@ void loop() {
             stepper.moveTo(offset + steps);
             stepper.runToPosition();
           }
-          Serial.print("Interval: ");
-          Serial.print(i - 1);
-          Serial.print(", Run to: ");
-          Serial.print(offset + steps);
-          Serial.print(", time: ");
-          Serial.println(start_time);
+          // Serial.print("Interval: ");
+          // Serial.print(i - 1);
+          // Serial.print(", Run to: ");
+          // Serial.print(offset + steps);
+          // Serial.print(", time: ");
+          // Serial.println(start_time);
         }
         else{
           play = false;
@@ -105,21 +105,22 @@ void loop() {
       }
     }
     if(direction == -1){
-      Serial.println("Play end to start.");
       if((millis()/1000) - start_time >= I_s){
-        if(steps > 0 && i <= I_count){
+        //Serial.println(steps);
+        if(steps < MAX_s && i <= I_count){
           i++;
           start_time = millis()/1000;
+          double m = offset - steps;
           if(mocon){
-            stepper.moveTo(offset - steps);
+            stepper.moveTo(m);
             stepper.runToPosition();
           }
-          Serial.print("Interval: ");
-          Serial.print(i);
-          Serial.print("Run to: ");
-          Serial.print(offset - steps);
-          Serial.print(", time: ");
-          Serial.println(start_time);
+          // Serial.print("Interval: ");
+          // Serial.print(i);
+          // Serial.print(" Run to: ");
+          // Serial.print(m);
+          // Serial.print(", time: ");
+          // Serial.println(start_time);
         }
         else{
           play = false;
@@ -170,6 +171,10 @@ void setCommand(String c){
     if(mocon){
       isZero = false;
       toZero();
+      //Serial.println(offset);
+      stepper.moveTo(offset);
+      stepper.runToPosition();
+      delay(5);
     }
     play = true;
     start_time = millis()/1000;
@@ -186,13 +191,13 @@ void setCommand(String c){
     }
   }else{
     // parse values
-    Serial.println(c);
+    //Serial.println(c);
     String* p = split(c, '|', qtde);
     I_count = p[0].toDouble();
     I_mm = p[1].toDouble();
     I_s = p[2].toDouble();
     direction = p[3].toDouble();
-    offset = p[4].toDouble();
+    offset = p[4].toDouble() * 100;
     delete[] p;
     Serial.print("Intervals: ");
     Serial.println(I_count);
@@ -204,10 +209,6 @@ void setCommand(String c){
     Serial.println(direction);
     Serial.print("Offset: ");
     Serial.println(offset);
-    if(mocon){
-      stepper.moveTo(offset * 100);
-      stepper.runToPosition();
-    }
   }
 }
 String* split(String& v, char delimiter, int& length) {
@@ -255,11 +256,11 @@ void toZero(){
   }
   else{
     Serial.println("Go to zero!");
-    while(stepper.currentPosition() > -MAX_s && digitalRead(limPin) > 0) 
+    while(stepper.currentPosition() > MAX_s * -1 && digitalRead(limPin) > 0) 
     {
       stepper.setSpeed(-1000);
       stepper.runSpeed();
-      checkClient("Run to reference point");
+      delay(2);
     }
     isZero = true;
     Serial.println();
